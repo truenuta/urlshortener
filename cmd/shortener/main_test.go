@@ -7,7 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
+	"github.com/truenuta/urlshortener/internal/handler"
 )
 
 func TestShortenRequest(t *testing.T) {
@@ -24,18 +26,23 @@ func TestShortenRequest(t *testing.T) {
 			wantStatus: http.StatusCreated,
 		},
 		{
-			name:       "PUT returns 405",
-			method:     http.MethodPut,
-			body:       "/",
-			wantStatus: http.StatusMethodNotAllowed,
+			name:       "POST empty body",
+			method:     http.MethodPost,
+			body:       "",
+			wantStatus: http.StatusBadRequest,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			storage = make(map[string]string)
+			h := handler.NewHandler()
+
+			r := chi.NewRouter()
+			r.Post("/", h.ShortenURL)
+			r.Get("/{id}", h.GetOriginalURL)
+
 			request := httptest.NewRequest(tt.method, "/", strings.NewReader(tt.body))
 			recorder := httptest.NewRecorder()
-			ShortenRequest(recorder, request)
+			r.ServeHTTP(recorder, request)
 			response := recorder.Result()
 			assert.Equal(t, tt.wantStatus, response.StatusCode)
 			defer response.Body.Close()
@@ -44,17 +51,23 @@ func TestShortenRequest(t *testing.T) {
 	}
 }
 func TestRedirect(t *testing.T) {
-	storage = make(map[string]string)
+	h := handler.NewHandler()
+
+	r := chi.NewRouter()
+	r.Post("/", h.ShortenURL)
+	r.Get("/{id}", h.GetOriginalURL)
+
 	testURL := "https://example.com"
 	postReq := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(testURL))
 	recorderPost := httptest.NewRecorder()
-	ShortenRequest(recorderPost, postReq)
+	r.ServeHTTP(recorderPost, postReq)
 	postResp := recorderPost.Result()
 	response_body, _ := io.ReadAll(postResp.Body)
 
-	reqURL := httptest.NewRequest(http.MethodGet, "/"+string(response_body), nil)
+	path := strings.TrimPrefix(string(response_body), "http://localhost:8080")
+	reqURL := httptest.NewRequest(http.MethodGet, path, nil)
 	recorderGet := httptest.NewRecorder()
-	ShortenRequest(recorderGet, reqURL)
+	r.ServeHTTP(recorderGet, reqURL)
 	getURL := recorderGet.Result()
 
 	assert.Equal(t, getURL.StatusCode, http.StatusTemporaryRedirect)
