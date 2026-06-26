@@ -52,7 +52,7 @@ func TestRedirect(t *testing.T) {
 	postResp := recorderPost.Result()
 	response_body, _ := io.ReadAll(postResp.Body)
 
-	reqURL := httptest.NewRequest(http.MethodGet, "/"+string(response_body), nil)
+	reqURL := httptest.NewRequest(http.MethodGet, string(response_body), nil)
 	recorderGet := httptest.NewRecorder()
 	ShortenRequest(recorderGet, reqURL)
 	getURL := recorderGet.Result()
