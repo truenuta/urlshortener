@@ -27,7 +27,7 @@ func ShortenRequest(response http.ResponseWriter, request *http.Request) {
 		url := shorten(string(body))
 		response.Header().Set("content-type", "text/plain")
 		response.WriteHeader(http.StatusCreated)
-		response.Write([]byte(url))
+		response.Write([]byte("http://localhost:8080/" + url))
 	}
 	if request.Method == http.MethodGet {
 		id := strings.TrimPrefix(request.URL.Path, "/")
