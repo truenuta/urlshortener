@@ -10,15 +10,17 @@ import (
 
 type Handler struct {
 	storage map[string]string
+	baseURL string
 }
 
-func NewHandler() *Handler {
+func NewHandler(BaseShortURLAddress string) *Handler {
 	return &Handler{
 		storage: make(map[string]string),
+		baseURL: BaseShortURLAddress,
 	}
 }
 func (h *Handler) shorten(body string) string {
-	id := uuid.New().String() // заменить на нормальный метод
+	id := uuid.New().String()
 	h.storage[id] = body
 	return id
 }
@@ -36,7 +38,7 @@ func (h *Handler) ShortenURL(response http.ResponseWriter, request *http.Request
 	shortURL := h.shorten(string(body))
 	response.Header().Set("Content-Type", "text/plain")
 	response.WriteHeader(http.StatusCreated)
-	response.Write([]byte("http://localhost:8080/" + shortURL))
+	response.Write([]byte(h.baseURL + "/" + shortURL))
 }
 
 func (h *Handler) GetOriginalURL(response http.ResponseWriter, request *http.Request) {
