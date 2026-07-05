@@ -1,16 +1,22 @@
 package main
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/truenuta/urlshortener/internal/config"
 	"github.com/truenuta/urlshortener/internal/handler"
+	"github.com/truenuta/urlshortener/internal/repository"
+	"github.com/truenuta/urlshortener/internal/service"
 )
 
 func main() {
+
 	cfg := config.ParseFlags()
-	h := handler.NewHandler(cfg.BaseShortURLAddress)
+	repository := repository.NewStorage()
+	service := service.NewURLServiсe(repository)
+	h := handler.NewHandler(cfg.BaseShortURLAddress, service)
 	r := chi.NewRouter()
 
 	r.Post("/", h.ShortenURL)
@@ -18,7 +24,7 @@ func main() {
 
 	err := http.ListenAndServe(cfg.Address, r)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 }

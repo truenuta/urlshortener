@@ -10,6 +10,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/truenuta/urlshortener/internal/handler"
+	"github.com/truenuta/urlshortener/internal/repository"
+	"github.com/truenuta/urlshortener/internal/service"
 )
 
 func TestShortenRequest(t *testing.T) {
@@ -34,7 +36,9 @@ func TestShortenRequest(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := handler.NewHandler("http://localhost:8080")
+			repository := repository.NewStorage()
+			service := service.NewURLServiсe(repository)
+			h := handler.NewHandler("http://localhost:8080", service)
 			r := chi.NewRouter()
 			r.Post("/", h.ShortenURL)
 			r.Get("/{id}", h.GetOriginalURL)
@@ -50,7 +54,9 @@ func TestShortenRequest(t *testing.T) {
 	}
 }
 func TestRedirect(t *testing.T) {
-	h := handler.NewHandler("http://localhost:8080")
+	repository := repository.NewStorage()
+	service := service.NewURLServiсe(repository)
+	h := handler.NewHandler("http://localhost:8080", service)
 
 	r := chi.NewRouter()
 	r.Post("/", h.ShortenURL)
@@ -61,15 +67,15 @@ func TestRedirect(t *testing.T) {
 	recorderPost := httptest.NewRecorder()
 	r.ServeHTTP(recorderPost, postReq)
 	postResp := recorderPost.Result()
-	response_body, _ := io.ReadAll(postResp.Body)
+	responseBody, _ := io.ReadAll(postResp.Body)
 
-	path := strings.TrimPrefix(string(response_body), "http://localhost:8080")
+	path := strings.TrimPrefix(string(responseBody), "http://localhost:8080")
 	reqURL := httptest.NewRequest(http.MethodGet, path, nil)
 	recorderGet := httptest.NewRecorder()
 	r.ServeHTTP(recorderGet, reqURL)
 	getURL := recorderGet.Result()
 
-	assert.Equal(t, getURL.StatusCode, http.StatusTemporaryRedirect)
+	assert.Equal(t, http.StatusTemporaryRedirect, getURL.StatusCode)
 	assert.Equal(t, testURL, getURL.Header.Get("Location"))
 
 }
