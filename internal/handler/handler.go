@@ -32,7 +32,11 @@ func (h *Handler) ShortenURL(response http.ResponseWriter, request *http.Request
 		http.Error(response, "bad request", http.StatusBadRequest)
 		return
 	}
-	shortURL := h.service.Shorten(string(body))
+	shortURL, err := h.service.Shorten(string(body))
+	if err != nil {
+		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
 	response.Header().Set("Content-Type", "text/plain")
 	response.WriteHeader(http.StatusCreated)
 	responseUrl, err := url.JoinPath(h.baseURL, shortURL)

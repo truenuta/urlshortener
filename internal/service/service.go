@@ -1,13 +1,16 @@
 package service
 
 import (
+	"errors"
 	"math/rand"
 
 	"github.com/truenuta/urlshortener/internal/repository"
 )
 
+var ErrGeneratingIdFail = errors.New("Failed generating unique id")
+
 type Service interface {
-	Shorten(url string) string
+	Shorten(url string) (string, error)
 	GetURL(id string) (URL string, ok bool)
 }
 
@@ -30,15 +33,21 @@ func randomString(n int) string {
 	return string(randBytes)
 }
 
-func (us *URLService) Shorten(url string) string {
+func (us *URLService) Shorten(url string) (string, error) {
 	LenOfGeneratedUrl := 8
 	id := randomString(LenOfGeneratedUrl)
-	for {
-		if _, exists := us.repository.Get(id); !exists {
-			us.repository.Save(id, url)
-			return id
+	numOfTryies := 5
+	for i := 0; i < numOfTryies; i++ {
+		saveError := us.repository.Save(id, url)
+		if saveError == nil {
+			return id, nil
 		}
+		if errors.Is(saveError, repository.ErrIDConflict) {
+			continue
+		}
+		return "", saveError
 	}
+	return "", ErrGeneratingIdFail
 }
 
 func (us *URLService) GetURL(id string) (URL string, ok bool) {

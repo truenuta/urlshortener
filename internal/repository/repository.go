@@ -1,11 +1,14 @@
 package repository
 
 import (
+	"errors"
 	"sync"
 )
 
+var ErrIDConflict = errors.New("id already exists")
+
 type Repository interface {
-	Save(id, url string)
+	Save(id, url string) error
 	Get(id string) (string, bool)
 }
 
@@ -27,8 +30,12 @@ func (s *Storage) Get(id string) (originalURL string, ok bool) {
 	return
 }
 
-func (s *Storage) Save(id, url string) {
+func (s *Storage) Save(id, url string) error {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.storage[id]; exists {
+		return ErrIDConflict
+	}
 	s.storage[id] = url
-	s.mu.Unlock()
+	return nil
 }
