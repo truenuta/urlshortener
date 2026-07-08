@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 )
 
@@ -33,8 +34,8 @@ func (s *Storage) Get(id string) (originalURL string, ok bool) {
 func (s *Storage) Save(id, url string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, exists := s.storage[id]; exists {
-		return ErrIDConflict
+	if _, ok := s.storage[id]; ok {
+		return fmt.Errorf("%w: %q", ErrIDConflict, id)
 	}
 	s.storage[id] = url
 	return nil
