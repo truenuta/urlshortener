@@ -13,7 +13,7 @@ import (
 
 func main() {
 
-	cfg := config.ParseFlags()
+	cfg := config.NewConfig()
 	repository := repository.NewStorage()
 	service := service.NewURLServiсe(repository)
 	h := handler.NewHandler(cfg.BaseShortURLAddress, service)

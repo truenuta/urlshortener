@@ -2,11 +2,28 @@ package config
 
 import (
 	"flag"
+	"log"
+
+	"github.com/caarlos0/env/v6"
 )
 
 type Config struct {
-	Address             string
-	BaseShortURLAddress string
+	Address             string `env:"SERVER_ADDRESS"`
+	BaseShortURLAddress string `env:"BASE_URL"`
+}
+
+func NewConfig() *Config {
+	cfgFlag := ParseFlags()
+	cfg := ParseEnvList()
+	if cfg.Address == "" {
+		cfg.Address = cfgFlag.Address
+	}
+	if cfg.BaseShortURLAddress == "" {
+		cfg.BaseShortURLAddress = cfgFlag.BaseShortURLAddress
+	}
+
+	return cfg
+
 }
 
 func ParseFlags() *Config {
@@ -19,4 +36,14 @@ func ParseFlags() *Config {
 		Address:             address,
 		BaseShortURLAddress: baseShortURLAddress,
 	}
+}
+
+func ParseEnvList() *Config {
+	var cfg Config
+	err := env.Parse(&cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return &cfg
+
 }
