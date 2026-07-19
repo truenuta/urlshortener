@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"net/http"
 
 	"go.uber.org/zap"
@@ -24,16 +23,17 @@ func main() {
 
 	repository := repository.NewStorage()
 	service := service.NewURLServiсe(repository)
-	h := handler.NewHandler(cfg.BaseShortURLAddress, service)
+	h := handler.NewHandler(cfg.BaseShortURLAddress, service, zapLogger)
 	r := chi.NewRouter()
 	r.Use(logger.RequestLogger(zapLogger))
 
 	r.Post("/", h.ShortenURL)
+	r.Post("/api/shorten", h.Shorten)
 	r.Get("/{id}", h.GetOriginalURL)
 
 	LaSerr := http.ListenAndServe(cfg.Address, r)
 	if LaSerr != nil {
-		log.Fatal(LaSerr)
+		zapLogger.Fatal("server failed", zap.Error(LaSerr))
 	}
 
 }

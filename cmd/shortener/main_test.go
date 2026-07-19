@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,8 +12,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/truenuta/urlshortener/internal/handler"
+	"github.com/truenuta/urlshortener/internal/model"
 	"github.com/truenuta/urlshortener/internal/repository"
 	"github.com/truenuta/urlshortener/internal/service"
+	"go.uber.org/zap"
 )
 
 func TestShortenRequest(t *testing.T) {
@@ -37,8 +41,12 @@ func TestShortenRequest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repository := repository.NewStorage()
+			zapLogger, err := zap.NewDevelopment()
+			if err != nil {
+				panic(err)
+			}
 			service := service.NewURLServiсe(repository)
-			h := handler.NewHandler("http://localhost:8080", service)
+			h := handler.NewHandler("http://localhost:8080", service, zapLogger)
 			r := chi.NewRouter()
 			r.Post("/", h.ShortenURL)
 			r.Get("/{id}", h.GetOriginalURL)
@@ -54,9 +62,13 @@ func TestShortenRequest(t *testing.T) {
 	}
 }
 func TestRedirect(t *testing.T) {
+	zapLogger, err := zap.NewDevelopment()
+	if err != nil {
+		panic(err)
+	}
 	repository := repository.NewStorage()
 	service := service.NewURLServiсe(repository)
-	h := handler.NewHandler("http://localhost:8080", service)
+	h := handler.NewHandler("http://localhost:8080", service, zapLogger)
 
 	r := chi.NewRouter()
 	r.Post("/", h.ShortenURL)
@@ -78,4 +90,35 @@ func TestRedirect(t *testing.T) {
 	assert.Equal(t, http.StatusTemporaryRedirect, getURL.StatusCode)
 	assert.Equal(t, testURL, getURL.Header.Get("Location"))
 
+}
+
+func TestAPIShorten(t *testing.T) {
+	zapLogger, err := zap.NewDevelopment()
+	if err != nil {
+		panic(err)
+	}
+	repository := repository.NewStorage()
+	service := service.NewURLServiсe(repository)
+	h := handler.NewHandler("http://localhost:8080", service, zapLogger)
+
+	r := chi.NewRouter()
+	r.Post("/api/shorten", h.Shorten)
+
+	var req model.Request
+	req.URL = "https://example.com"
+
+	body, _ := json.Marshal(req)
+
+	postReq := httptest.NewRequest(http.MethodPost, "/api/shorten", bytes.NewReader(body))
+	recorderPost := httptest.NewRecorder()
+	r.ServeHTTP(recorderPost, postReq)
+	postResp := recorderPost.Result()
+
+	assert.Equal(t, http.StatusCreated, postResp.StatusCode)
+	assert.Equal(t, "application/json", postResp.Header.Get("Content-Type"))
+
+	var resp model.Response
+	json.NewDecoder(postResp.Body).Decode(&resp)
+	assert.NotEmpty(t, resp.Result)
+	assert.Contains(t, resp.Result, "http://localhost:8080")
 }
