@@ -40,7 +40,7 @@ func TestShortenRequest(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repository := repository.NewStorage()
+			repository := repository.NewStorage("")
 			zapLogger, err := zap.NewDevelopment()
 			if err != nil {
 				panic(err)
@@ -66,7 +66,7 @@ func TestRedirect(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	repository := repository.NewStorage()
+	repository := repository.NewStorage("")
 	service := service.NewURLServiсe(repository)
 	h := handler.NewHandler("http://localhost:8080", service, zapLogger)
 
@@ -97,7 +97,7 @@ func TestAPIShorten(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	repository := repository.NewStorage()
+	repository := repository.NewStorage("")
 	service := service.NewURLServiсe(repository)
 	h := handler.NewHandler("http://localhost:8080", service, zapLogger)
 

@@ -22,7 +22,11 @@ func main() {
 		panic(err)
 	}
 
-	repository := repository.NewStorage()
+	repository := repository.NewStorage(cfg.FileStoragePath)
+	err = repository.Load()
+	if err != nil {
+		zapLogger.Fatal("failed to load storage", zap.Error(err))
+	}
 	service := service.NewURLServiсe(repository)
 	h := handler.NewHandler(cfg.BaseShortURLAddress, service, zapLogger)
 	r := chi.NewRouter()
