@@ -6,6 +6,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/truenuta/urlshortener/cmd/skill"
 	"github.com/truenuta/urlshortener/internal/config"
 	"github.com/truenuta/urlshortener/internal/handler"
 	"github.com/truenuta/urlshortener/internal/logger"
@@ -26,6 +27,7 @@ func main() {
 	h := handler.NewHandler(cfg.BaseShortURLAddress, service, zapLogger)
 	r := chi.NewRouter()
 	r.Use(logger.RequestLogger(zapLogger))
+	r.Use(skill.GzipMiddleware)
 
 	r.Post("/", h.ShortenURL)
 	r.Post("/api/shorten", h.Shorten)
