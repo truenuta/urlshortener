@@ -1,28 +1,37 @@
 package main
 
 import (
+	"log"
 	"net/http"
 
 	"go.uber.org/zap"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/truenuta/urlshortener/cmd/skill"
 	"github.com/truenuta/urlshortener/internal/config"
 	"github.com/truenuta/urlshortener/internal/handler"
 	"github.com/truenuta/urlshortener/internal/logger"
+	"github.com/truenuta/urlshortener/internal/middleware"
 	"github.com/truenuta/urlshortener/internal/repository"
 	"github.com/truenuta/urlshortener/internal/service"
 )
 
 func main() {
 
-	cfg := config.NewConfig()
 	zapLogger, err := zap.NewDevelopment()
 	if err != nil {
-		panic(err)
+		log.Fatalf("logger did not init, %v", err)
+	}
+	cfg, err := config.NewConfig()
+	if err != nil {
+		zapLogger.Fatal("failed to get config", zap.Error(err))
 	}
 
-	repository := repository.NewStorage(cfg.FileStoragePath)
+	repository, err := repository.NewStorage(cfg.FileStoragePath)
+	if err != nil {
+		zapLogger.Fatal("failed to initialiaze storage", zap.Error(err))
+	}
+	defer repository.Close()
+
 	err = repository.Load()
 	if err != nil {
 		zapLogger.Fatal("failed to load storage", zap.Error(err))
@@ -31,7 +40,7 @@ func main() {
 	h := handler.NewHandler(cfg.BaseShortURLAddress, service, zapLogger)
 	r := chi.NewRouter()
 	r.Use(logger.RequestLogger(zapLogger))
-	r.Use(skill.GzipMiddleware)
+	r.Use(middleware.GzipMiddleware)
 
 	r.Post("/", h.ShortenURL)
 	r.Post("/api/shorten", h.Shorten)

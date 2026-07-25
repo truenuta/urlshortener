@@ -40,11 +40,16 @@ func TestShortenRequest(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repository := repository.NewStorage("")
 			zapLogger, err := zap.NewDevelopment()
 			if err != nil {
-				panic(err)
+				t.Fatalf("logger did not init, %v", err)
 			}
+			repository, err := repository.NewStorage("")
+			if err != nil {
+				zapLogger.Fatal("failed to initialiaze storage", zap.Error(err))
+			}
+			defer repository.Close()
+
 			service := service.NewURLServiсe(repository)
 			h := handler.NewHandler("http://localhost:8080", service, zapLogger)
 			r := chi.NewRouter()
@@ -64,9 +69,13 @@ func TestShortenRequest(t *testing.T) {
 func TestRedirect(t *testing.T) {
 	zapLogger, err := zap.NewDevelopment()
 	if err != nil {
-		panic(err)
+		t.Fatalf("logger did not init, %v", err)
 	}
-	repository := repository.NewStorage("")
+	repository, err := repository.NewStorage("")
+	if err != nil {
+		zapLogger.Fatal("failed to initialiaze storage", zap.Error(err))
+	}
+	defer repository.Close()
 	service := service.NewURLServiсe(repository)
 	h := handler.NewHandler("http://localhost:8080", service, zapLogger)
 
@@ -95,9 +104,9 @@ func TestRedirect(t *testing.T) {
 func TestAPIShorten(t *testing.T) {
 	zapLogger, err := zap.NewDevelopment()
 	if err != nil {
-		panic(err)
+		t.Fatalf("logger did not init, %v", err)
 	}
-	repository := repository.NewStorage("")
+	repository, err := repository.NewStorage("")
 	service := service.NewURLServiсe(repository)
 	h := handler.NewHandler("http://localhost:8080", service, zapLogger)
 
@@ -118,7 +127,10 @@ func TestAPIShorten(t *testing.T) {
 	assert.Equal(t, "application/json", postResp.Header.Get("Content-Type"))
 
 	var resp model.Response
-	json.NewDecoder(postResp.Body).Decode(&resp)
+	err = json.NewDecoder(postResp.Body).Decode(&resp)
+	if err != nil {
+		t.Fatalf("response decoded with an error, %v", err)
+	}
 	assert.NotEmpty(t, resp.Result)
 	assert.Contains(t, resp.Result, "http://localhost:8080")
 }

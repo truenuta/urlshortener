@@ -14,11 +14,16 @@ type Service interface {
 	GetURL(id string) (URL string, ok bool)
 }
 
-type URLService struct {
-	repository repository.Repository
+type Repository interface {
+	Save(id, url string) error
+	Get(id string) (string, bool)
 }
 
-func NewURLServiсe(repository repository.Repository) *URLService {
+type URLService struct {
+	repository Repository
+}
+
+func NewURLServiсe(repository Repository) *URLService {
 	return &URLService{
 		repository: repository,
 	}

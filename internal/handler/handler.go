@@ -70,18 +70,19 @@ func (h *Handler) Shorten(response http.ResponseWriter, request *http.Request) {
 	dec := json.NewDecoder(request.Body)
 	if err := dec.Decode(&req); err != nil {
 		h.logger.Debug("cannot decode request JSON body", zap.Error(err))
-		response.WriteHeader(http.StatusInternalServerError)
+		response.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	shortID, err := h.service.Shorten(req.URL)
 	if err != nil {
-		http.Error(response, err.Error(), http.StatusBadRequest)
+		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 
 	responseURL, err := url.JoinPath(h.baseURL, shortID)
 	if err != nil {
+		h.logger.Error("cannot create response", zap.Error(err))
 		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}

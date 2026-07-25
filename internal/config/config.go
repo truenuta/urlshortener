@@ -2,9 +2,8 @@ package config
 
 import (
 	"flag"
-	"log"
 
-	"github.com/caarlos0/env/v6"
+	"github.com/caarlos0/env/v11"
 )
 
 type Config struct {
@@ -13,9 +12,12 @@ type Config struct {
 	FileStoragePath     string `env:"FILE_STORAGE_PATH"`
 }
 
-func NewConfig() *Config {
+func NewConfig() (*Config, error) {
 	cfgFlag := ParseFlags()
-	cfg := ParseEnvList()
+	cfg, err := ParseEnvList()
+	if err != nil {
+		return nil, err
+	}
 	if cfg.Address == "" {
 		cfg.Address = cfgFlag.Address
 	}
@@ -26,7 +28,7 @@ func NewConfig() *Config {
 		cfg.FileStoragePath = cfgFlag.FileStoragePath
 	}
 
-	return cfg
+	return cfg, nil
 
 }
 
@@ -45,12 +47,12 @@ func ParseFlags() *Config {
 	}
 }
 
-func ParseEnvList() *Config {
+func ParseEnvList() (*Config, error) {
 	var cfg Config
 	err := env.Parse(&cfg)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
-	return &cfg
+	return &cfg, nil
 
 }

@@ -1,4 +1,4 @@
-package skill
+package middleware
 
 import (
 	"compress/gzip"
