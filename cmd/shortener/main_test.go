@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
+	"github.com/truenuta/urlshortener/internal/db"
 	"github.com/truenuta/urlshortener/internal/handler"
 	"github.com/truenuta/urlshortener/internal/model"
 	"github.com/truenuta/urlshortener/internal/repository"
@@ -50,8 +51,14 @@ func TestShortenRequest(t *testing.T) {
 			}
 			defer repository.Close()
 
+			database, err := db.NewDB("")
+			if err != nil {
+				zapLogger.Fatal("failed to connect to database", zap.Error(err))
+			}
+			defer database.Close()
+
 			service := service.NewURLServiсe(repository)
-			h := handler.NewHandler("http://localhost:8080", service, zapLogger)
+			h := handler.NewHandler("http://localhost:8080", service, zapLogger, database)
 			r := chi.NewRouter()
 			r.Post("/", h.ShortenURL)
 			r.Get("/{id}", h.GetOriginalURL)
@@ -76,8 +83,15 @@ func TestRedirect(t *testing.T) {
 		zapLogger.Fatal("failed to initialiaze storage", zap.Error(err))
 	}
 	defer repository.Close()
+
+	database, err := db.NewDB("")
+	if err != nil {
+		zapLogger.Fatal("failed to connect to database", zap.Error(err))
+	}
+	defer database.Close()
+
 	service := service.NewURLServiсe(repository)
-	h := handler.NewHandler("http://localhost:8080", service, zapLogger)
+	h := handler.NewHandler("http://localhost:8080", service, zapLogger, database)
 
 	r := chi.NewRouter()
 	r.Post("/", h.ShortenURL)
@@ -108,7 +122,14 @@ func TestAPIShorten(t *testing.T) {
 	}
 	repository, err := repository.NewStorage("")
 	service := service.NewURLServiсe(repository)
-	h := handler.NewHandler("http://localhost:8080", service, zapLogger)
+
+	database, err := db.NewDB("")
+	if err != nil {
+		zapLogger.Fatal("failed to connect to database", zap.Error(err))
+	}
+	defer database.Close()
+
+	h := handler.NewHandler("http://localhost:8080", service, zapLogger, database)
 
 	r := chi.NewRouter()
 	r.Post("/api/shorten", h.Shorten)

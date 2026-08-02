@@ -1,10 +1,13 @@
 package handler
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/truenuta/urlshortener/internal/model"
@@ -16,13 +19,15 @@ type Handler struct {
 	baseURL string
 	service service.Service
 	logger  *zap.Logger
+	db      *sql.DB
 }
 
-func NewHandler(BaseShortURLAddress string, service service.Service, logger *zap.Logger) *Handler {
+func NewHandler(BaseShortURLAddress string, service service.Service, logger *zap.Logger, db *sql.DB) *Handler {
 	return &Handler{
 		baseURL: BaseShortURLAddress,
 		service: service,
 		logger:  logger,
+		db:      db,
 	}
 }
 
@@ -99,4 +104,14 @@ func (h *Handler) Shorten(response http.ResponseWriter, request *http.Request) {
 		h.logger.Debug("error encoding response", zap.Error(err))
 		return
 	}
+}
+
+func (h *Handler) PingBD(response http.ResponseWriter, request *http.Request) {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	if err := h.db.PingContext(ctx); err != nil {
+		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	response.WriteHeader(http.StatusOK)
 }
