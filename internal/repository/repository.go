@@ -2,6 +2,8 @@ package repository
 
 import (
 	"bufio"
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/truenuta/urlshortener/internal/db"
 )
 
 var ErrIDConflict = errors.New("id already exists")
@@ -17,6 +20,36 @@ type FileURLRecord struct {
 	UUID        string `json:"uuid"`
 	ShortURL    string `json:"short_url"`
 	OriginalURL string `json:"original_url"`
+}
+
+type PostgresStorage struct {
+	db *sql.DB
+}
+
+func NewPostgresStorage(db *sql.DB) *PostgresStorage {
+	return &PostgresStorage{db: db}
+}
+func (p *PostgresStorage) Save(id, url string) error {
+	_, err := p.db.Exec("INSERT INTO urls (uuid, short_url, original_url) VALUES ($1, $2, $3)", uuid.New().String(), id, url)
+	if err != nil {
+		return fmt.Errorf("can not save url: %w", err)
+	}
+	return err
+}
+
+func (p *PostgresStorage) Get(id string) (string, bool) {
+	var original_url string
+	rows := p.db.QueryRow(`SELECT original_url FROM urls WHERE short_url = $1`, id)
+	err := rows.Scan(&original_url)
+	if err != nil {
+		return "", false
+	}
+	return original_url, true
+}
+func (p *PostgresStorage) Close() error { return p.db.Close() }
+func (p *PostgresStorage) Load() error  { return nil }
+func (p *PostgresStorage) Ping(ctx context.Context) error {
+	return p.db.PingContext(ctx)
 }
 
 type Storage struct {
@@ -99,4 +132,32 @@ func (s *Storage) Close() error {
 		return err
 	}
 	return nil
+}
+
+func (s *Storage) Ping(ctx context.Context) error {
+	return errors.New("database is not configured")
+}
+
+type URLRepository interface {
+	Save(id, url string) error
+	Get(id string) (string, bool)
+	Load() error
+	Close() error
+	Ping(ctx context.Context) error
+}
+
+func NewURLRepository(dsn, filepath string) (URLRepository, error) {
+	if dsn != "" {
+		database, err := db.NewDB(dsn)
+		if err != nil {
+			return nil, fmt.Errorf("can not connect to database: %w", err)
+		}
+		if err := db.RunMigrations(database); err != nil {
+			database.Close()
+			return nil, fmt.Errorf("run migrations: %w", err)
+		}
+		return NewPostgresStorage(database), nil
+	}
+	return NewStorage(filepath)
+
 }

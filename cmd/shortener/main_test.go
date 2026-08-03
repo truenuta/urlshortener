@@ -45,7 +45,7 @@ func TestShortenRequest(t *testing.T) {
 			if err != nil {
 				t.Fatalf("logger did not init, %v", err)
 			}
-			repository, err := repository.NewStorage("")
+			repository, err := repository.NewURLRepository("", "")
 			if err != nil {
 				zapLogger.Fatal("failed to initialiaze storage", zap.Error(err))
 			}
@@ -58,7 +58,7 @@ func TestShortenRequest(t *testing.T) {
 			defer database.Close()
 
 			service := service.NewURLServiсe(repository)
-			h := handler.NewHandler("http://localhost:8080", service, zapLogger, database)
+			h := handler.NewHandler("http://localhost:8080", service, zapLogger, repository)
 			r := chi.NewRouter()
 			r.Post("/", h.ShortenURL)
 			r.Get("/{id}", h.GetOriginalURL)
@@ -78,20 +78,17 @@ func TestRedirect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("logger did not init, %v", err)
 	}
-	repository, err := repository.NewStorage("")
+	repository, err := repository.NewURLRepository("", "")
 	if err != nil {
 		zapLogger.Fatal("failed to initialiaze storage", zap.Error(err))
 	}
 	defer repository.Close()
-
-	database, err := db.NewDB("")
 	if err != nil {
 		zapLogger.Fatal("failed to connect to database", zap.Error(err))
 	}
-	defer database.Close()
 
 	service := service.NewURLServiсe(repository)
-	h := handler.NewHandler("http://localhost:8080", service, zapLogger, database)
+	h := handler.NewHandler("http://localhost:8080", service, zapLogger, repository)
 
 	r := chi.NewRouter()
 	r.Post("/", h.ShortenURL)
@@ -120,7 +117,11 @@ func TestAPIShorten(t *testing.T) {
 	if err != nil {
 		t.Fatalf("logger did not init, %v", err)
 	}
-	repository, err := repository.NewStorage("")
+	repository, err := repository.NewURLRepository("", "")
+	if err != nil {
+		zapLogger.Fatal("failed to initialiaze storage", zap.Error(err))
+	}
+	defer repository.Close()
 	service := service.NewURLServiсe(repository)
 
 	database, err := db.NewDB("")
@@ -129,7 +130,7 @@ func TestAPIShorten(t *testing.T) {
 	}
 	defer database.Close()
 
-	h := handler.NewHandler("http://localhost:8080", service, zapLogger, database)
+	h := handler.NewHandler("http://localhost:8080", service, zapLogger, repository)
 
 	r := chi.NewRouter()
 	r.Post("/api/shorten", h.Shorten)

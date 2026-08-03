@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/truenuta/urlshortener/internal/model"
+	"github.com/truenuta/urlshortener/internal/repository"
 	"github.com/truenuta/urlshortener/internal/service"
 	"go.uber.org/zap"
 )
@@ -19,15 +19,15 @@ type Handler struct {
 	baseURL string
 	service service.Service
 	logger  *zap.Logger
-	db      *sql.DB
+	repo    repository.URLRepository
 }
 
-func NewHandler(BaseShortURLAddress string, service service.Service, logger *zap.Logger, db *sql.DB) *Handler {
+func NewHandler(BaseShortURLAddress string, service service.Service, logger *zap.Logger, repo repository.URLRepository) *Handler {
 	return &Handler{
 		baseURL: BaseShortURLAddress,
 		service: service,
 		logger:  logger,
-		db:      db,
+		repo:    repo,
 	}
 }
 
@@ -109,7 +109,7 @@ func (h *Handler) Shorten(response http.ResponseWriter, request *http.Request) {
 func (h *Handler) PingBD(response http.ResponseWriter, request *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
-	if err := h.db.PingContext(ctx); err != nil {
+	if err := h.repo.Ping(ctx); err != nil {
 		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}

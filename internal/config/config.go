@@ -44,7 +44,7 @@ func ParseFlags() *Config {
 	flag.StringVar(&address, "a", "localhost:8080", "адрес запуска HTTP-сервера")
 	flag.StringVar(&baseShortURLAddress, "b", "http://localhost:8080", "базовый адрес результирующего сокращённого URL ")
 	flag.StringVar(&filePath, "f", "storage.json", "путь к файлу хранения данных")
-	flag.StringVar(&DataBaseDSN, "d", "storage.json", "строка подключения к базе данных")
+	flag.StringVar(&DataBaseDSN, "d", "", "строка подключения к базе данных")
 	flag.Parse()
 	return &Config{
 		Address:             address,
