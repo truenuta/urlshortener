@@ -54,10 +54,6 @@ func (h *Handler) ShortenURL(response http.ResponseWriter, request *http.Request
 		}
 		response.Header().Set("Content-Type", "text/plain")
 		response.WriteHeader(http.StatusConflict)
-		if err != nil {
-			http.Error(response, err.Error(), http.StatusBadRequest)
-			return
-		}
 		response.Write([]byte(responseUrl))
 		return
 
