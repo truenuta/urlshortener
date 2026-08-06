@@ -43,6 +43,7 @@ func main() {
 
 	r.Post("/", h.ShortenURL)
 	r.Post("/api/shorten", h.Shorten)
+	r.Post("/api/shorten/batch", h.ShortenBatch)
 	r.Get("/{id}", h.GetOriginalURL)
 	r.Get("/ping", h.PingBD)
 

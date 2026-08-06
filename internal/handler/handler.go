@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -14,6 +15,8 @@ import (
 	"github.com/truenuta/urlshortener/internal/service"
 	"go.uber.org/zap"
 )
+
+var conflictErr *repository.ConflictError
 
 type Handler struct {
 	baseURL string
@@ -86,9 +89,16 @@ func (h *Handler) Shorten(response http.ResponseWriter, request *http.Request) {
 	}
 
 	responseURL, err := url.JoinPath(h.baseURL, shortID)
-	if err != nil {
-		h.logger.Error("cannot create response", zap.Error(err))
-		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+	if errors.As(err, &conflictErr) {
+		responseUrl, joinErr := url.JoinPath(h.baseURL, conflictErr.ShortURL)
+		if joinErr != nil {
+			h.logger.Error("cannot create response", zap.Error(joinErr))
+			http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+		response.Header().Set("Content-Type", "application/json")
+		response.WriteHeader(http.StatusConflict)
+		json.NewEncoder(response).Encode(model.Response{Result: responseUrl})
 		return
 	}
 
@@ -114,4 +124,40 @@ func (h *Handler) PingBD(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 	response.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) ShortenBatch(response http.ResponseWriter, request *http.Request) {
+	var req []model.BatchRequest
+
+	dec := json.NewDecoder(request.Body)
+	if err := dec.Decode(&req); err != nil {
+		h.logger.Debug("cannot decode batch request JSON body", zap.Error(err))
+		response.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if len(req) == 0 {
+		http.Error(response, "empty batch", http.StatusBadRequest)
+		return
+	}
+	items, err := h.service.ShortenBatch(req)
+	if err != nil {
+		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	for i := range items {
+		resultShortURL, err := url.JoinPath(h.baseURL, items[i].ShortURL)
+		if err != nil {
+			h.logger.Error("cannot create response", zap.Error(err))
+		}
+		items[i].ShortURL = resultShortURL
+	}
+	response.Header().Set("Content-Type", "application/json")
+	response.WriteHeader(http.StatusCreated)
+
+	enc := json.NewEncoder(response)
+	if err := enc.Encode(items); err != nil {
+		h.logger.Debug("error encoding batch response", zap.Error(err))
+		return
+	}
+
 }

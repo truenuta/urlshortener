@@ -16,6 +16,18 @@ import (
 
 var ErrIDConflict = errors.New("id already exists")
 
+type ConflictError struct {
+	ShortURL string
+}
+
+func NewConflictError(url string) *ConflictError {
+	return &ConflictError{ShortURL: url}
+}
+
+func (ce *ConflictError) Error() string {
+	return fmt.Sprintf("url has already been added: %v", ce.ShortURL)
+}
+
 type FileURLRecord struct {
 	UUID        string `json:"uuid"`
 	ShortURL    string `json:"short_url"`
@@ -30,11 +42,19 @@ func NewPostgresStorage(db *sql.DB) *PostgresStorage {
 	return &PostgresStorage{db: db}
 }
 func (p *PostgresStorage) Save(id, url string) error {
-	_, err := p.db.Exec("INSERT INTO urls (uuid, short_url, original_url) VALUES ($1, $2, $3)", uuid.New().String(), id, url)
+	var shortURL string
+	err := p.db.QueryRow(
+		`INSERT INTO urls (uuid, short_url, original_url) VALUES ($1, $2, $3)
+		 ON CONFLICT (original_url) DO UPDATE SET original_url = EXCLUDED.original_url
+		 RETURNING short_url`,
+		uuid.New().String(), id, url).Scan(&shortURL)
 	if err != nil {
 		return fmt.Errorf("can not save url: %w", err)
 	}
-	return err
+	if shortURL != id {
+		return NewConflictError(shortURL)
+	}
+	return nil
 }
 
 func (p *PostgresStorage) Get(id string) (string, bool) {
@@ -83,13 +103,17 @@ func (s *Storage) Get(id string) (originalURL string, ok bool) {
 func (s *Storage) Save(id, url string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	for existingID, existingURL := range s.storage {
+		if existingURL == url {
+			return NewConflictError(existingID)
+		}
+	}
 	if _, ok := s.storage[id]; ok {
 		return fmt.Errorf("%w: %q", ErrIDConflict, id)
 	}
 	s.storage[id] = url
 
 	if s.file != nil {
-
 		record := FileURLRecord{}
 		record.UUID = uuid.New().String()
 		record.OriginalURL = url
@@ -144,6 +168,7 @@ type URLRepository interface {
 	Load() error
 	Close() error
 	Ping(ctx context.Context) error
+	SaveBatch(items []BatchItem) error
 }
 
 func NewURLRepository(dsn, filepath string) (URLRepository, error) {
@@ -159,5 +184,62 @@ func NewURLRepository(dsn, filepath string) (URLRepository, error) {
 		return NewPostgresStorage(database), nil
 	}
 	return NewStorage(filepath)
+
+}
+
+type BatchItem struct {
+	ID  string
+	URL string
+}
+
+func (p *PostgresStorage) SaveBatch(items []BatchItem) error {
+	tx, err := p.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	stmt, err := tx.Prepare(
+		`INSERT INTO urls (uuid, short_url, original_url) VALUES ($1, $2, $3)
+		 ON CONFLICT (original_url) DO UPDATE SET original_url = EXCLUDED.original_url
+		 RETURNING short_url`,
+	)
+	if err != nil {
+		return fmt.Errorf("prepare statement: %w", err)
+	}
+	defer stmt.Close()
+	for _, item := range items {
+		if _, err := stmt.Exec(uuid.New().String(), item.ID, item.URL); err != nil {
+			return fmt.Errorf("save batch item: %w", err)
+		}
+	}
+	return tx.Commit()
+
+}
+
+func (s *Storage) SaveBatch(items []BatchItem) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, item := range items {
+		if _, ok := s.storage[item.ID]; ok {
+			return fmt.Errorf("%w: %q", ErrIDConflict, item.ID)
+		}
+		s.storage[item.ID] = item.URL
+		if s.file != nil {
+			record := FileURLRecord{}
+			record.UUID = uuid.New().String()
+			record.OriginalURL = item.URL
+			record.ShortURL = item.ID
+			data, err := json.Marshal(record)
+			if err != nil {
+				return fmt.Errorf("marshal batch record: %w", err)
+			}
+			data = append(data, '\n')
+			_, err = s.file.Write(data)
+			if err != nil {
+				return fmt.Errorf("saving to file is failed - %w", err)
+			}
+		}
+	}
+	return nil
 
 }
