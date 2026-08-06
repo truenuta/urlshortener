@@ -16,8 +16,6 @@ import (
 	"go.uber.org/zap"
 )
 
-var conflictErr *repository.ConflictError
-
 type Handler struct {
 	baseURL string
 	service service.Service
@@ -35,6 +33,7 @@ func NewHandler(BaseShortURLAddress string, service service.Service, logger *zap
 }
 
 func (h *Handler) ShortenURL(response http.ResponseWriter, request *http.Request) {
+	var conflictErr *repository.ConflictError
 	body, err := io.ReadAll(request.Body)
 	if err != nil {
 		http.Error(response, err.Error(), http.StatusBadRequest)
@@ -46,13 +45,31 @@ func (h *Handler) ShortenURL(response http.ResponseWriter, request *http.Request
 		return
 	}
 	shortURL, err := h.service.Shorten(string(body))
+	if errors.As(err, &conflictErr) {
+		responseUrl, joinErr := url.JoinPath(h.baseURL, conflictErr.ShortURL)
+		if joinErr != nil {
+			h.logger.Error("cannot create response", zap.Error(joinErr))
+			http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+		response.Header().Set("Content-Type", "text/plain")
+		response.WriteHeader(http.StatusConflict)
+		if err != nil {
+			http.Error(response, err.Error(), http.StatusBadRequest)
+			return
+		}
+		response.Write([]byte(responseUrl))
+		return
+
+	}
 	if err != nil {
-		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
 	response.Header().Set("Content-Type", "text/plain")
 	response.WriteHeader(http.StatusCreated)
 	responseUrl, err := url.JoinPath(h.baseURL, shortURL)
+
 	if err != nil {
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
@@ -73,6 +90,7 @@ func (h *Handler) GetOriginalURL(response http.ResponseWriter, request *http.Req
 }
 
 func (h *Handler) Shorten(response http.ResponseWriter, request *http.Request) {
+	var conflictErr *repository.ConflictError
 	var req model.Request
 
 	dec := json.NewDecoder(request.Body)
@@ -83,12 +101,6 @@ func (h *Handler) Shorten(response http.ResponseWriter, request *http.Request) {
 	}
 
 	shortID, err := h.service.Shorten(req.URL)
-	if err != nil {
-		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
-
-	responseURL, err := url.JoinPath(h.baseURL, shortID)
 	if errors.As(err, &conflictErr) {
 		responseUrl, joinErr := url.JoinPath(h.baseURL, conflictErr.ShortURL)
 		if joinErr != nil {
@@ -101,6 +113,11 @@ func (h *Handler) Shorten(response http.ResponseWriter, request *http.Request) {
 		json.NewEncoder(response).Encode(model.Response{Result: responseUrl})
 		return
 	}
+	if err != nil {
+		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	responseURL, err := url.JoinPath(h.baseURL, shortID)
 
 	resp := model.Response{
 		Result: responseURL,
