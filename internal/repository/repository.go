@@ -25,7 +25,7 @@ func NewConflictError(url string) *ConflictError {
 }
 
 func (ce *ConflictError) Error() string {
-	return fmt.Sprintf("url has already been added: %v", ce.ShortURL)
+	return ce.ShortURL
 }
 
 type FileURLRecord struct {
