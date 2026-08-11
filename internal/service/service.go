@@ -8,8 +8,20 @@ import (
 	"github.com/truenuta/urlshortener/internal/repository"
 )
 
-var ErrGeneratingIdFail = errors.New("Failed generating unique id")
-var LenOfGeneratedUrl int = 8
+var ErrGeneratingIdFail = errors.New("failed generating unique id")
+var lenOfGeneratedURL int = 8
+
+type ConflictError struct {
+	ShortURL string
+}
+
+func NewConflictError(url string) *ConflictError {
+	return &ConflictError{ShortURL: url}
+}
+
+func (ce *ConflictError) Error() string {
+	return ce.ShortURL
+}
 
 type Service interface {
 	Shorten(url string) (string, error)
@@ -44,14 +56,19 @@ func randomString(n int) string {
 
 func (us *URLService) Shorten(url string) (string, error) {
 	numOfTryies := 5
+
 	for i := 0; i < numOfTryies; i++ {
-		id := randomString(LenOfGeneratedUrl)
+		id := randomString(lenOfGeneratedURL)
 		saveError := us.repository.Save(id, url)
 		if saveError == nil {
 			return id, nil
 		}
 		if errors.Is(saveError, repository.ErrIDConflict) {
 			continue
+		}
+		var conflictErr *repository.ConflictError
+		if errors.As(saveError, &conflictErr) {
+			return "", NewConflictError(conflictErr.ShortURL)
 		}
 		return "", saveError
 	}
@@ -69,7 +86,7 @@ func (us *URLService) ShortenBatch(items []model.BatchRequest) ([]model.BatchRes
 
 	for _, item := range items {
 		var id string
-		id = randomString(LenOfGeneratedUrl)
+		id = randomString(lenOfGeneratedURL)
 		batch = append(batch, repository.BatchItem{ID: id, URL: item.OriginalURL})
 		response = append(response, model.BatchResponse{CorrelationID: item.CorrelationID, ShortURL: id})
 	}

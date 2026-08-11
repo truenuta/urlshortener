@@ -32,11 +32,21 @@ func NewHandler(BaseShortURLAddress string, service service.Service, logger *zap
 	}
 }
 
+func (h *Handler) writeConflictResponse(response http.ResponseWriter, shortURL string) (string, bool) {
+	responseUrl, joinErr := url.JoinPath(h.baseURL, shortURL)
+	if joinErr != nil {
+		h.logger.Error("can not create response", zap.Error(joinErr))
+		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return "", false
+	}
+	return responseUrl, true
+}
+
 func (h *Handler) ShortenURL(response http.ResponseWriter, request *http.Request) {
-	var conflictErr *repository.ConflictError
+	var conflictErr *service.ConflictError
 	body, err := io.ReadAll(request.Body)
 	if err != nil {
-		http.Error(response, err.Error(), http.StatusBadRequest)
+		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 
 	}
@@ -45,31 +55,29 @@ func (h *Handler) ShortenURL(response http.ResponseWriter, request *http.Request
 		return
 	}
 	shortURL, err := h.service.Shorten(string(body))
-	if errors.As(err, &conflictErr) {
-		responseUrl, joinErr := url.JoinPath(h.baseURL, conflictErr.ShortURL)
-		if joinErr != nil {
-			h.logger.Error("cannot create response", zap.Error(joinErr))
-			http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+	if err != nil {
+		if errors.As(err, &conflictErr) {
+			if responseUrl, ok := h.writeConflictResponse(response, conflictErr.ShortURL); ok {
+				response.Header().Set("Content-Type", "text/plain")
+				response.WriteHeader(http.StatusConflict)
+				response.Write([]byte(responseUrl))
+				return
+			}
 			return
 		}
-		response.Header().Set("Content-Type", "text/plain")
-		response.WriteHeader(http.StatusConflict)
-		response.Write([]byte(responseUrl))
-		return
-
 	}
+	if err != nil {
+		http.Error(response, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	responseUrl, err := url.JoinPath(h.baseURL, shortURL)
 	if err != nil {
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
 	response.Header().Set("Content-Type", "text/plain")
 	response.WriteHeader(http.StatusCreated)
-	responseUrl, err := url.JoinPath(h.baseURL, shortURL)
-
-	if err != nil {
-		http.Error(response, err.Error(), http.StatusBadRequest)
-		return
-	}
 	response.Write([]byte(responseUrl))
 }
 
@@ -86,7 +94,7 @@ func (h *Handler) GetOriginalURL(response http.ResponseWriter, request *http.Req
 }
 
 func (h *Handler) Shorten(response http.ResponseWriter, request *http.Request) {
-	var conflictErr *repository.ConflictError
+	var conflictErr *service.ConflictError
 	var req model.Request
 
 	dec := json.NewDecoder(request.Body)
@@ -98,15 +106,12 @@ func (h *Handler) Shorten(response http.ResponseWriter, request *http.Request) {
 
 	shortID, err := h.service.Shorten(req.URL)
 	if errors.As(err, &conflictErr) {
-		responseUrl, joinErr := url.JoinPath(h.baseURL, conflictErr.ShortURL)
-		if joinErr != nil {
-			h.logger.Error("cannot create response", zap.Error(joinErr))
-			http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		if responseUrl, ok := h.writeConflictResponse(response, conflictErr.ShortURL); ok {
+			response.Header().Set("Content-Type", "application/json")
+			response.WriteHeader(http.StatusConflict)
+			json.NewEncoder(response).Encode(model.Response{Result: responseUrl})
 			return
 		}
-		response.Header().Set("Content-Type", "application/json")
-		response.WriteHeader(http.StatusConflict)
-		json.NewEncoder(response).Encode(model.Response{Result: responseUrl})
 		return
 	}
 	if err != nil {
@@ -115,18 +120,22 @@ func (h *Handler) Shorten(response http.ResponseWriter, request *http.Request) {
 	}
 	responseURL, err := url.JoinPath(h.baseURL, shortID)
 
+	if err != nil {
+		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
 	resp := model.Response{
 		Result: responseURL,
 	}
-
 	response.Header().Set("Content-Type", "application/json")
 	response.WriteHeader(http.StatusCreated)
-
 	enc := json.NewEncoder(response)
 	if err := enc.Encode(resp); err != nil {
 		h.logger.Debug("error encoding response", zap.Error(err))
 		return
 	}
+
 }
 
 func (h *Handler) PingBD(response http.ResponseWriter, request *http.Request) {

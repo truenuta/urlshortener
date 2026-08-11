@@ -3,7 +3,6 @@ package repository
 import (
 	"bufio"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,44 +31,6 @@ type FileURLRecord struct {
 	UUID        string `json:"uuid"`
 	ShortURL    string `json:"short_url"`
 	OriginalURL string `json:"original_url"`
-}
-
-type PostgresStorage struct {
-	db *sql.DB
-}
-
-func NewPostgresStorage(db *sql.DB) *PostgresStorage {
-	return &PostgresStorage{db: db}
-}
-func (p *PostgresStorage) Save(id, url string) error {
-	var shortURL string
-	err := p.db.QueryRow(
-		`INSERT INTO urls (uuid, short_url, original_url) VALUES ($1, $2, $3)
-		 ON CONFLICT (original_url) DO UPDATE SET original_url = EXCLUDED.original_url
-		 RETURNING short_url`,
-		uuid.New().String(), id, url).Scan(&shortURL)
-	if err != nil {
-		return fmt.Errorf("can not save url: %w", err)
-	}
-	if shortURL != id {
-		return NewConflictError(shortURL)
-	}
-	return nil
-}
-
-func (p *PostgresStorage) Get(id string) (string, bool) {
-	var original_url string
-	rows := p.db.QueryRow(`SELECT original_url FROM urls WHERE short_url = $1`, id)
-	err := rows.Scan(&original_url)
-	if err != nil {
-		return "", false
-	}
-	return original_url, true
-}
-func (p *PostgresStorage) Close() error { return p.db.Close() }
-func (p *PostgresStorage) Load() error  { return nil }
-func (p *PostgresStorage) Ping(ctx context.Context) error {
-	return p.db.PingContext(ctx)
 }
 
 type Storage struct {
@@ -190,30 +151,6 @@ func NewURLRepository(dsn, filepath string) (URLRepository, error) {
 type BatchItem struct {
 	ID  string
 	URL string
-}
-
-func (p *PostgresStorage) SaveBatch(items []BatchItem) error {
-	tx, err := p.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	stmt, err := tx.Prepare(
-		`INSERT INTO urls (uuid, short_url, original_url) VALUES ($1, $2, $3)
-		 ON CONFLICT (original_url) DO UPDATE SET original_url = EXCLUDED.original_url
-		 RETURNING short_url`,
-	)
-	if err != nil {
-		return fmt.Errorf("prepare statement: %w", err)
-	}
-	defer stmt.Close()
-	for _, item := range items {
-		if _, err := stmt.Exec(uuid.New().String(), item.ID, item.URL); err != nil {
-			return fmt.Errorf("save batch item: %w", err)
-		}
-	}
-	return tx.Commit()
-
 }
 
 func (s *Storage) SaveBatch(items []BatchItem) error {
