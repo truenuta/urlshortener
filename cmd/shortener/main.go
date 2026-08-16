@@ -26,25 +26,26 @@ func main() {
 		zapLogger.Fatal("failed to get config", zap.Error(err))
 	}
 
-	repository, err := repository.NewStorage(cfg.FileStoragePath)
+	repository, err := repository.NewURLRepository(cfg.DataBaseDSN, cfg.FileStoragePath)
 	if err != nil {
 		zapLogger.Fatal("failed to initialiaze storage", zap.Error(err))
 	}
 	defer repository.Close()
-
 	err = repository.Load()
 	if err != nil {
 		zapLogger.Fatal("failed to load storage", zap.Error(err))
 	}
 	service := service.NewURLServiсe(repository)
-	h := handler.NewHandler(cfg.BaseShortURLAddress, service, zapLogger)
+	h := handler.NewHandler(cfg.BaseShortURLAddress, service, zapLogger, repository)
 	r := chi.NewRouter()
 	r.Use(logger.RequestLogger(zapLogger))
 	r.Use(middleware.GzipMiddleware)
 
 	r.Post("/", h.ShortenURL)
 	r.Post("/api/shorten", h.Shorten)
+	r.Post("/api/shorten/batch", h.ShortenBatch)
 	r.Get("/{id}", h.GetOriginalURL)
+	r.Get("/ping", h.PingBD)
 
 	LaSerr := http.ListenAndServe(cfg.Address, r)
 	if LaSerr != nil {
