@@ -17,13 +17,15 @@ type Storage struct {
 	storage map[string]string
 	owners  map[string]string
 	file    *os.File
+	deleted map[string]bool
 }
 
 func NewStorage(filePath string) (*Storage, error) {
 	storage := make(map[string]string)
 	owners := make(map[string]string)
+	deleted := make(map[string]bool)
 	if filePath == "" {
-		return &Storage{storage: storage, owners: owners, file: nil}, nil
+		return &Storage{storage: storage, owners: owners, file: nil, deleted: deleted}, nil
 	}
 	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
@@ -33,12 +35,14 @@ func NewStorage(filePath string) (*Storage, error) {
 		storage: storage,
 		owners:  owners,
 		file:    file,
+		deleted: deleted,
 	}, nil
 }
 
-func (s *Storage) Get(id string) (originalURL string, ok bool) {
+func (s *Storage) Get(id string) (originalURL string, isDeleted bool, ok bool) {
 	s.mu.Lock()
 	originalURL, ok = s.storage[id]
+	isDeleted = s.deleted[id]
 	s.mu.Unlock()
 	return
 }
@@ -91,6 +95,7 @@ func (s *Storage) Load() error {
 			}
 			s.storage[record.ShortURL] = record.OriginalURL
 			s.owners[record.ShortURL] = record.UserID
+			s.deleted[record.ShortURL] = record.DeletedFlag
 		}
 	}
 	return nil
@@ -151,4 +156,15 @@ func (s *Storage) GetUserURLs(userID string) ([]URLRecord, error) {
 		}
 	}
 	return result, nil
+}
+
+func (s *Storage) DeleteBatch(userID string, shortURLs []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, id := range shortURLs {
+		if s.owners[id] == userID {
+			s.deleted[id] = true
+		}
+	}
+	return nil
 }

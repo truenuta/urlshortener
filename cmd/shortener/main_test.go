@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/truenuta/urlshortener/internal/db"
+	"github.com/truenuta/urlshortener/internal/deleter"
 	"github.com/truenuta/urlshortener/internal/handler"
 	"github.com/truenuta/urlshortener/internal/model"
 	"github.com/truenuta/urlshortener/internal/repository"
@@ -58,7 +60,12 @@ func TestShortenRequest(t *testing.T) {
 			defer database.Close()
 
 			service := service.NewURLServiсe(repository)
-			h := handler.NewHandler("http://localhost:8080", service, zapLogger, repository)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			urlDeleter := deleter.NewDeleter(repository, zapLogger)
+			go urlDeleter.Run(ctx)
+
+			h := handler.NewHandler("http://localhost:8080", service, zapLogger, repository, urlDeleter)
 			r := chi.NewRouter()
 			r.Post("/", h.ShortenURL)
 			r.Get("/{id}", h.GetOriginalURL)
@@ -88,7 +95,12 @@ func TestRedirect(t *testing.T) {
 	}
 
 	service := service.NewURLServiсe(repository)
-	h := handler.NewHandler("http://localhost:8080", service, zapLogger, repository)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	urlDeleter := deleter.NewDeleter(repository, zapLogger)
+	go urlDeleter.Run(ctx)
+
+	h := handler.NewHandler("http://localhost:8080", service, zapLogger, repository, urlDeleter)
 
 	r := chi.NewRouter()
 	r.Post("/", h.ShortenURL)
@@ -130,7 +142,12 @@ func TestAPIShorten(t *testing.T) {
 	}
 	defer database.Close()
 
-	h := handler.NewHandler("http://localhost:8080", service, zapLogger, repository)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	urlDeleter := deleter.NewDeleter(repository, zapLogger)
+	go urlDeleter.Run(ctx)
+
+	h := handler.NewHandler("http://localhost:8080", service, zapLogger, repository, urlDeleter)
 
 	r := chi.NewRouter()
 	r.Post("/api/shorten", h.Shorten)

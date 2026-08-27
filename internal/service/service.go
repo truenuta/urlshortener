@@ -25,16 +25,17 @@ func (ce *ConflictError) Error() string {
 
 type Service interface {
 	Shorten(url, userID string) (string, error)
-	GetURL(id string) (URL string, ok bool)
+	GetURL(id string) (URL string, isDeleted bool, ok bool)
 	ShortenBatch(items []model.BatchRequest, userID string) ([]model.BatchResponse, error)
 	GetUserURLs(userID string) ([]model.UserURL, error)
 }
 
 type Repository interface {
 	Save(id, userID, url string) error
-	Get(id string) (string, bool)
+	Get(id string) (string, bool, bool)
 	SaveBatch(items []repository.BatchItem) error
 	GetUserURLs(userID string) ([]repository.URLRecord, error)
+	DeleteBatch(userID string, shortURLs []string) error
 }
 
 type URLService struct {
@@ -77,8 +78,8 @@ func (us *URLService) Shorten(url, userID string) (string, error) {
 	return "", ErrGeneratingIdFail
 }
 
-func (us *URLService) GetURL(id string) (URL string, ok bool) {
-	URL, ok = us.repository.Get(id)
+func (us *URLService) GetURL(id string) (URL string, isDeleted bool, ok bool) {
+	URL, isDeleted, ok = us.repository.Get(id)
 	return
 }
 

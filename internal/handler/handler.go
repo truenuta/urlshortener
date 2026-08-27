@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/truenuta/urlshortener/internal/deleter"
 	"github.com/truenuta/urlshortener/internal/model"
 	"github.com/truenuta/urlshortener/internal/repository"
 	"github.com/truenuta/urlshortener/internal/service"
@@ -21,14 +22,16 @@ type Handler struct {
 	service service.Service
 	logger  *zap.Logger
 	repo    repository.URLRepository
+	deleter *deleter.Deleter
 }
 
-func NewHandler(BaseShortURLAddress string, service service.Service, logger *zap.Logger, repo repository.URLRepository) *Handler {
+func NewHandler(BaseShortURLAddress string, service service.Service, logger *zap.Logger, repo repository.URLRepository, deleter *deleter.Deleter) *Handler {
 	return &Handler{
 		baseURL: BaseShortURLAddress,
 		service: service,
 		logger:  logger,
 		repo:    repo,
+		deleter: deleter,
 	}
 }
 
@@ -84,9 +87,13 @@ func (h *Handler) ShortenURL(response http.ResponseWriter, request *http.Request
 
 func (h *Handler) GetOriginalURL(response http.ResponseWriter, request *http.Request) {
 	id := chi.URLParam(request, "id")
-	originalURL, ok := h.service.GetURL(id)
+	originalURL, deleted, ok := h.service.GetURL(id)
 	if !ok {
 		http.Error(response, "bad request", http.StatusBadRequest)
+		return
+	}
+	if deleted {
+		response.WriteHeader(http.StatusGone)
 		return
 	}
 	response.Header().Set("Location", originalURL)
@@ -212,4 +219,21 @@ func (h *Handler) GetUserURLs(response http.ResponseWriter, request *http.Reques
 	response.Header().Set("Content-Type", "application/json")
 	response.WriteHeader(http.StatusOK)
 	json.NewEncoder(response).Encode(urls)
+}
+
+func (h *Handler) DeleteUserURLs(response http.ResponseWriter, request *http.Request) {
+	if authFailed, _ := request.Context().Value("authFailed").(bool); authFailed {
+		response.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	userID, _ := request.Context().Value("id").(string)
+	var shortURLs []string
+	if err := json.NewDecoder(request.Body).Decode(&shortURLs); err != nil {
+		h.logger.Debug("cannot decode delete request JSON body", zap.Error(err))
+		response.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	h.deleter.ScheduleDeletion(userID, shortURLs)
+	response.WriteHeader(http.StatusAccepted)
+
 }

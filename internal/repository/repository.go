@@ -27,6 +27,7 @@ type URLRecord struct {
 	ShortURL    string `json:"short_url"`
 	OriginalURL string `json:"original_url"`
 	UserID      string `json:"user_id"`
+	DeletedFlag bool   `json:"is_deleted"`
 }
 
 type BatchItem struct {
@@ -37,12 +38,13 @@ type BatchItem struct {
 
 type URLRepository interface {
 	Save(id, UserID, url string) error
-	Get(id string) (string, bool)
+	Get(id string) (string, bool, bool)
 	Load() error
 	Close() error
 	Ping(ctx context.Context) error
 	SaveBatch(items []BatchItem) error
 	GetUserURLs(userID string) ([]URLRecord, error)
+	DeleteBatch(userID string, shortURLs []string) error
 }
 
 func NewURLRepository(dsn, filepath string) (URLRepository, error) {

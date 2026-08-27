@@ -33,14 +33,15 @@ func (p *PostgresStorage) Save(shortUrl, userID, url string) error {
 	return nil
 }
 
-func (p *PostgresStorage) Get(shortUrl string) (string, bool) {
+func (p *PostgresStorage) Get(shortUrl string) (string, bool, bool) {
 	var original_url string
-	rows := p.db.QueryRow(`SELECT original_url FROM urls WHERE short_url = $1`, shortUrl)
-	err := rows.Scan(&original_url)
+	var isDeleted bool
+	rows := p.db.QueryRow(`SELECT original_url, is_deleted FROM urls WHERE short_url = $1`, shortUrl)
+	err := rows.Scan(&original_url, &isDeleted)
 	if err != nil {
-		return "", false
+		return "", false, false
 	}
-	return original_url, true
+	return original_url, isDeleted, true
 }
 
 func (p *PostgresStorage) Close() error { return p.db.Close() }
@@ -89,4 +90,19 @@ func (p *PostgresStorage) GetUserURLs(userID string) ([]URLRecord, error) {
 		return nil, err
 	}
 	return result, nil
+}
+
+func (p *PostgresStorage) DeleteBatch(userID string, shortURLs []string) error {
+	if len(shortURLs) == 0 {
+		return nil
+	}
+	_, err := p.db.Exec(
+		`UPDATE urls SET is_deleted = TRUE
+         WHERE user_id = $1 AND short_url = ANY($2)`,
+		userID, shortURLs,
+	)
+	if err != nil {
+		return fmt.Errorf("delete batch: %w", err)
+	}
+	return nil
 }
