@@ -54,7 +54,8 @@ func (h *Handler) ShortenURL(response http.ResponseWriter, request *http.Request
 		http.Error(response, "bad request", http.StatusBadRequest)
 		return
 	}
-	shortURL, err := h.service.Shorten(string(body))
+	userID, _ := request.Context().Value("id").(string)
+	shortURL, err := h.service.Shorten(string(body), userID)
 	if err != nil {
 		if errors.As(err, &conflictErr) {
 			if responseUrl, ok := h.writeConflictResponse(response, conflictErr.ShortURL); ok {
@@ -104,7 +105,8 @@ func (h *Handler) Shorten(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 
-	shortID, err := h.service.Shorten(req.URL)
+	userID, _ := request.Context().Value("id").(string)
+	shortID, err := h.service.Shorten(req.URL, userID)
 	if errors.As(err, &conflictErr) {
 		if responseUrl, ok := h.writeConflictResponse(response, conflictErr.ShortURL); ok {
 			response.Header().Set("Content-Type", "application/json")
@@ -161,7 +163,8 @@ func (h *Handler) ShortenBatch(response http.ResponseWriter, request *http.Reque
 		http.Error(response, "empty batch", http.StatusBadRequest)
 		return
 	}
-	items, err := h.service.ShortenBatch(req)
+	userID, _ := request.Context().Value("id").(string)
+	items, err := h.service.ShortenBatch(req, userID)
 	if err != nil {
 		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -182,4 +185,31 @@ func (h *Handler) ShortenBatch(response http.ResponseWriter, request *http.Reque
 		return
 	}
 
+}
+
+func (h *Handler) GetUserURLs(response http.ResponseWriter, request *http.Request) {
+	if authFailed, _ := request.Context().Value("authFailed").(bool); authFailed {
+		response.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	userID, _ := request.Context().Value("id").(string)
+	urls, err := h.service.GetUserURLs(userID)
+	if err != nil {
+		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	if len(urls) == 0 {
+		response.WriteHeader(http.StatusNoContent)
+		return
+	}
+	for i := range urls {
+		full, err := url.JoinPath(h.baseURL, urls[i].ShortURL)
+		if err != nil {
+			h.logger.Error("cannot build short url", zap.Error(err))
+		}
+		urls[i].ShortURL = full
+	}
+	response.Header().Set("Content-Type", "application/json")
+	response.WriteHeader(http.StatusOK)
+	json.NewEncoder(response).Encode(urls)
 }

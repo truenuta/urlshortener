@@ -40,12 +40,14 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(logger.RequestLogger(zapLogger))
 	r.Use(middleware.GzipMiddleware)
+	r.Use(middleware.AuthMiddleware)
 
 	r.Post("/", h.ShortenURL)
 	r.Post("/api/shorten", h.Shorten)
 	r.Post("/api/shorten/batch", h.ShortenBatch)
 	r.Get("/{id}", h.GetOriginalURL)
 	r.Get("/ping", h.PingBD)
+	r.Get("/api/user/urls", h.GetUserURLs)
 
 	LaSerr := http.ListenAndServe(cfg.Address, r)
 	if LaSerr != nil {
