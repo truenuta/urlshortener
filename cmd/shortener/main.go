@@ -40,7 +40,12 @@ func main() {
 	service := service.NewURLServiсe(repository)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	urlDeleter := deleter.NewDeleter(repository, zapLogger)
+	urlDeleter := deleter.NewDeleter(repository, zapLogger, deleter.Config{
+		Workers:        cfg.DeleteWorkers,
+		FlushThreshold: cfg.DeleteFlushThreshold,
+		FlushInterval:  cfg.DeleteFlushInterval,
+		QueueCapacity:  cfg.DeleteQueueCapacity,
+	})
 	go urlDeleter.Run(ctx)
 
 	h := handler.NewHandler(cfg.BaseShortURLAddress, service, zapLogger, repository, urlDeleter)

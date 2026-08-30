@@ -11,21 +11,29 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/truenuta/urlshortener/internal/deleter"
+	"github.com/truenuta/urlshortener/internal/middleware"
 	"github.com/truenuta/urlshortener/internal/model"
 	"github.com/truenuta/urlshortener/internal/repository"
 	"github.com/truenuta/urlshortener/internal/service"
 	"go.uber.org/zap"
 )
 
+type Service interface {
+	Shorten(url, userID string) (string, error)
+	GetURL(id string) (URL string, isDeleted bool, ok bool)
+	ShortenBatch(items []model.BatchRequest, userID string) ([]model.BatchResponse, error)
+	GetUserURLs(userID string) ([]model.UserURL, error)
+}
+
 type Handler struct {
 	baseURL string
-	service service.Service
+	service Service
 	logger  *zap.Logger
 	repo    repository.URLRepository
 	deleter *deleter.Deleter
 }
 
-func NewHandler(BaseShortURLAddress string, service service.Service, logger *zap.Logger, repo repository.URLRepository, deleter *deleter.Deleter) *Handler {
+func NewHandler(BaseShortURLAddress string, service Service, logger *zap.Logger, repo repository.URLRepository, deleter *deleter.Deleter) *Handler {
 	return &Handler{
 		baseURL: BaseShortURLAddress,
 		service: service,
@@ -57,7 +65,7 @@ func (h *Handler) ShortenURL(response http.ResponseWriter, request *http.Request
 		http.Error(response, "bad request", http.StatusBadRequest)
 		return
 	}
-	userID, _ := request.Context().Value("id").(string)
+	userID, _ := middleware.UserIDFromContext(request.Context())
 	shortURL, err := h.service.Shorten(string(body), userID)
 	if err != nil {
 		if errors.As(err, &conflictErr) {
@@ -89,7 +97,7 @@ func (h *Handler) GetOriginalURL(response http.ResponseWriter, request *http.Req
 	id := chi.URLParam(request, "id")
 	originalURL, deleted, ok := h.service.GetURL(id)
 	if !ok {
-		http.Error(response, "bad request", http.StatusBadRequest)
+		http.Error(response, "not found", http.StatusNotFound)
 		return
 	}
 	if deleted {
@@ -112,7 +120,7 @@ func (h *Handler) Shorten(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 
-	userID, _ := request.Context().Value("id").(string)
+	userID, _ := middleware.UserIDFromContext(request.Context())
 	shortID, err := h.service.Shorten(req.URL, userID)
 	if errors.As(err, &conflictErr) {
 		if responseUrl, ok := h.writeConflictResponse(response, conflictErr.ShortURL); ok {
@@ -170,7 +178,7 @@ func (h *Handler) ShortenBatch(response http.ResponseWriter, request *http.Reque
 		http.Error(response, "empty batch", http.StatusBadRequest)
 		return
 	}
-	userID, _ := request.Context().Value("id").(string)
+	userID, _ := middleware.UserIDFromContext(request.Context())
 	items, err := h.service.ShortenBatch(req, userID)
 	if err != nil {
 		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -195,11 +203,11 @@ func (h *Handler) ShortenBatch(response http.ResponseWriter, request *http.Reque
 }
 
 func (h *Handler) GetUserURLs(response http.ResponseWriter, request *http.Request) {
-	if authFailed, _ := request.Context().Value("authFailed").(bool); authFailed {
+	if middleware.AuthFailedFromContext(request.Context()) {
 		response.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	userID, _ := request.Context().Value("id").(string)
+	userID, _ := middleware.UserIDFromContext(request.Context())
 	urls, err := h.service.GetUserURLs(userID)
 	if err != nil {
 		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -222,18 +230,18 @@ func (h *Handler) GetUserURLs(response http.ResponseWriter, request *http.Reques
 }
 
 func (h *Handler) DeleteUserURLs(response http.ResponseWriter, request *http.Request) {
-	if authFailed, _ := request.Context().Value("authFailed").(bool); authFailed {
+	if middleware.AuthFailedFromContext(request.Context()) {
 		response.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	userID, _ := request.Context().Value("id").(string)
+	userID, _ := middleware.UserIDFromContext(request.Context())
 	var shortURLs []string
 	if err := json.NewDecoder(request.Body).Decode(&shortURLs); err != nil {
 		h.logger.Debug("cannot decode delete request JSON body", zap.Error(err))
 		response.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	h.deleter.ScheduleDeletion(userID, shortURLs)
+	h.deleter.ScheduleDeletion(request.Context(), userID, shortURLs)
 	response.WriteHeader(http.StatusAccepted)
 
 }

@@ -7,6 +7,23 @@ import (
 	"github.com/truenuta/urlshortener/internal/auth"
 )
 
+type ctxKey string
+
+const (
+	userIDKey     ctxKey = "id"
+	authFailedKey ctxKey = "authFailed"
+)
+
+func UserIDFromContext(ctx context.Context) (string, bool) {
+	id, ok := ctx.Value(userIDKey).(string)
+	return id, ok
+}
+
+func AuthFailedFromContext(ctx context.Context) bool {
+	failed, _ := ctx.Value(authFailedKey).(bool)
+	return failed
+}
+
 func AuthMiddleware(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var id string
@@ -31,8 +48,8 @@ func AuthMiddleware(h http.Handler) http.Handler {
 				authFailed = true
 			}
 		}
-		ctx := context.WithValue(r.Context(), "id", id)
-		ctx = context.WithValue(ctx, "authFailed", authFailed)
+		ctx := context.WithValue(r.Context(), userIDKey, id)
+		ctx = context.WithValue(ctx, authFailedKey, authFailed)
 		r = r.WithContext(ctx)
 		h.ServeHTTP(w, r)
 

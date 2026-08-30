@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
@@ -62,7 +63,12 @@ func TestShortenRequest(t *testing.T) {
 			service := service.NewURLServiсe(repository)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			urlDeleter := deleter.NewDeleter(repository, zapLogger)
+			urlDeleter := deleter.NewDeleter(repository, zapLogger, deleter.Config{
+				Workers:        7,
+				FlushThreshold: 100,
+				FlushInterval:  5 * time.Second,
+				QueueCapacity:  1024,
+			})
 			go urlDeleter.Run(ctx)
 
 			h := handler.NewHandler("http://localhost:8080", service, zapLogger, repository, urlDeleter)
@@ -97,7 +103,12 @@ func TestRedirect(t *testing.T) {
 	service := service.NewURLServiсe(repository)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	urlDeleter := deleter.NewDeleter(repository, zapLogger)
+	urlDeleter := deleter.NewDeleter(repository, zapLogger, deleter.Config{
+		Workers:        7,
+		FlushThreshold: 100,
+		FlushInterval:  5 * time.Second,
+		QueueCapacity:  1024,
+	})
 	go urlDeleter.Run(ctx)
 
 	h := handler.NewHandler("http://localhost:8080", service, zapLogger, repository, urlDeleter)
@@ -144,7 +155,12 @@ func TestAPIShorten(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	urlDeleter := deleter.NewDeleter(repository, zapLogger)
+	urlDeleter := deleter.NewDeleter(repository, zapLogger, deleter.Config{
+		Workers:        7,
+		FlushThreshold: 100,
+		FlushInterval:  5 * time.Second,
+		QueueCapacity:  1024,
+	})
 	go urlDeleter.Run(ctx)
 
 	h := handler.NewHandler("http://localhost:8080", service, zapLogger, repository, urlDeleter)

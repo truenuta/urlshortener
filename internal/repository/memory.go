@@ -27,7 +27,7 @@ func NewStorage(filePath string) (*Storage, error) {
 	if filePath == "" {
 		return &Storage{storage: storage, owners: owners, file: nil, deleted: deleted}, nil
 	}
-	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		return nil, fmt.Errorf("file did not open - %w", err)
 	}

@@ -9,7 +9,7 @@ import (
 )
 
 const TOKEN_EXP = time.Hour * 3
-const SECRET_KEY = "supersecretkey"
+const SecretKey = "supersecretkey" // just for autotest and study purpose, not real key
 
 type Claims struct {
 	jwt.RegisteredClaims
@@ -25,7 +25,7 @@ func BuildJWTString(UserID string) (string, error) {
 			},
 			UserID: UserID,
 		})
-	tokenString, err := token.SignedString([]byte(SECRET_KEY))
+	tokenString, err := token.SignedString([]byte(SecretKey))
 	if err != nil {
 		return "", err
 	}
@@ -37,7 +37,7 @@ func GetUserID(tokenString string) (string, error) {
 	claims := &Claims{}
 
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
-		return []byte(SECRET_KEY), nil
+		return []byte(SecretKey), nil
 	})
 	if err != nil || !token.Valid {
 		return "", err

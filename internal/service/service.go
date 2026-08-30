@@ -23,13 +23,6 @@ func (ce *ConflictError) Error() string {
 	return ce.ShortURL
 }
 
-type Service interface {
-	Shorten(url, userID string) (string, error)
-	GetURL(id string) (URL string, isDeleted bool, ok bool)
-	ShortenBatch(items []model.BatchRequest, userID string) ([]model.BatchResponse, error)
-	GetUserURLs(userID string) ([]model.UserURL, error)
-}
-
 type Repository interface {
 	Save(id, userID, url string) error
 	Get(id string) (string, bool, bool)
