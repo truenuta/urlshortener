@@ -16,6 +16,7 @@ import (
 	"github.com/truenuta/urlshortener/internal/db"
 	"github.com/truenuta/urlshortener/internal/deleter"
 	"github.com/truenuta/urlshortener/internal/handler"
+	"github.com/truenuta/urlshortener/internal/middleware"
 	"github.com/truenuta/urlshortener/internal/model"
 	"github.com/truenuta/urlshortener/internal/repository"
 	"github.com/truenuta/urlshortener/internal/service"
@@ -73,6 +74,7 @@ func TestShortenRequest(t *testing.T) {
 
 			h := handler.NewHandler("http://localhost:8080", service, zapLogger, repository, urlDeleter)
 			r := chi.NewRouter()
+			r.Use(middleware.AuthMiddleware)
 			r.Post("/", h.ShortenURL)
 			r.Get("/{id}", h.GetOriginalURL)
 
@@ -114,6 +116,7 @@ func TestRedirect(t *testing.T) {
 	h := handler.NewHandler("http://localhost:8080", service, zapLogger, repository, urlDeleter)
 
 	r := chi.NewRouter()
+	r.Use(middleware.AuthMiddleware)
 	r.Post("/", h.ShortenURL)
 	r.Get("/{id}", h.GetOriginalURL)
 
@@ -166,6 +169,7 @@ func TestAPIShorten(t *testing.T) {
 	h := handler.NewHandler("http://localhost:8080", service, zapLogger, repository, urlDeleter)
 
 	r := chi.NewRouter()
+	r.Use(middleware.AuthMiddleware)
 	r.Post("/api/shorten", h.Shorten)
 
 	var req model.Request
