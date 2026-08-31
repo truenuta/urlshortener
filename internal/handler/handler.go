@@ -10,25 +10,36 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/truenuta/urlshortener/internal/deleter"
+	"github.com/truenuta/urlshortener/internal/middleware"
 	"github.com/truenuta/urlshortener/internal/model"
 	"github.com/truenuta/urlshortener/internal/repository"
 	"github.com/truenuta/urlshortener/internal/service"
 	"go.uber.org/zap"
 )
 
-type Handler struct {
-	baseURL string
-	service service.Service
-	logger  *zap.Logger
-	repo    repository.URLRepository
+type Service interface {
+	Shorten(url, userID string) (string, error)
+	GetURL(id string) (URL string, isDeleted bool, ok bool)
+	ShortenBatch(items []model.BatchRequest, userID string) ([]model.BatchResponse, error)
+	GetUserURLs(userID string) ([]model.UserURL, error)
 }
 
-func NewHandler(BaseShortURLAddress string, service service.Service, logger *zap.Logger, repo repository.URLRepository) *Handler {
+type Handler struct {
+	baseURL string
+	service Service
+	logger  *zap.Logger
+	repo    repository.URLRepository
+	deleter *deleter.Deleter
+}
+
+func NewHandler(BaseShortURLAddress string, service Service, logger *zap.Logger, repo repository.URLRepository, deleter *deleter.Deleter) *Handler {
 	return &Handler{
 		baseURL: BaseShortURLAddress,
 		service: service,
 		logger:  logger,
 		repo:    repo,
+		deleter: deleter,
 	}
 }
 
@@ -54,7 +65,13 @@ func (h *Handler) ShortenURL(response http.ResponseWriter, request *http.Request
 		http.Error(response, "bad request", http.StatusBadRequest)
 		return
 	}
-	shortURL, err := h.service.Shorten(string(body))
+	userID, ok := middleware.UserIDFromContext(request.Context())
+	if !ok {
+		h.logger.Error("no userID in context")
+		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	shortURL, err := h.service.Shorten(string(body), userID)
 	if err != nil {
 		if errors.As(err, &conflictErr) {
 			if responseUrl, ok := h.writeConflictResponse(response, conflictErr.ShortURL); ok {
@@ -83,9 +100,13 @@ func (h *Handler) ShortenURL(response http.ResponseWriter, request *http.Request
 
 func (h *Handler) GetOriginalURL(response http.ResponseWriter, request *http.Request) {
 	id := chi.URLParam(request, "id")
-	originalURL, ok := h.service.GetURL(id)
+	originalURL, deleted, ok := h.service.GetURL(id)
 	if !ok {
-		http.Error(response, "bad request", http.StatusBadRequest)
+		http.Error(response, "not found", http.StatusNotFound)
+		return
+	}
+	if deleted {
+		response.WriteHeader(http.StatusGone)
 		return
 	}
 	response.Header().Set("Location", originalURL)
@@ -104,7 +125,13 @@ func (h *Handler) Shorten(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 
-	shortID, err := h.service.Shorten(req.URL)
+	userID, ok := middleware.UserIDFromContext(request.Context())
+	if !ok {
+		h.logger.Error("no userID in context")
+		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	shortID, err := h.service.Shorten(req.URL, userID)
 	if errors.As(err, &conflictErr) {
 		if responseUrl, ok := h.writeConflictResponse(response, conflictErr.ShortURL); ok {
 			response.Header().Set("Content-Type", "application/json")
@@ -161,7 +188,13 @@ func (h *Handler) ShortenBatch(response http.ResponseWriter, request *http.Reque
 		http.Error(response, "empty batch", http.StatusBadRequest)
 		return
 	}
-	items, err := h.service.ShortenBatch(req)
+	userID, ok := middleware.UserIDFromContext(request.Context())
+	if !ok {
+		h.logger.Error("no userID in context")
+		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	items, err := h.service.ShortenBatch(req, userID)
 	if err != nil {
 		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -181,5 +214,51 @@ func (h *Handler) ShortenBatch(response http.ResponseWriter, request *http.Reque
 		h.logger.Debug("error encoding batch response", zap.Error(err))
 		return
 	}
+
+}
+
+func (h *Handler) GetUserURLs(response http.ResponseWriter, request *http.Request) {
+	userID, ok := middleware.UserIDFromContext(request.Context())
+	if !ok {
+		h.logger.Error("no userID in context")
+		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	urls, err := h.service.GetUserURLs(userID)
+	if err != nil {
+		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	if len(urls) == 0 {
+		response.WriteHeader(http.StatusNoContent)
+		return
+	}
+	for i := range urls {
+		full, err := url.JoinPath(h.baseURL, urls[i].ShortURL)
+		if err != nil {
+			h.logger.Error("cannot build short url", zap.Error(err))
+		}
+		urls[i].ShortURL = full
+	}
+	response.Header().Set("Content-Type", "application/json")
+	response.WriteHeader(http.StatusOK)
+	json.NewEncoder(response).Encode(urls)
+}
+
+func (h *Handler) DeleteUserURLs(response http.ResponseWriter, request *http.Request) {
+	userID, ok := middleware.UserIDFromContext(request.Context())
+	if !ok {
+		h.logger.Error("no userID in context")
+		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	var shortURLs []string
+	if err := json.NewDecoder(request.Body).Decode(&shortURLs); err != nil {
+		h.logger.Debug("cannot decode delete request JSON body", zap.Error(err))
+		response.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	h.deleter.ScheduleDeletion(request.Context(), userID, shortURLs)
+	response.WriteHeader(http.StatusAccepted)
 
 }

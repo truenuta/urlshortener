@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 
@@ -8,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/truenuta/urlshortener/internal/config"
+	"github.com/truenuta/urlshortener/internal/deleter"
 	"github.com/truenuta/urlshortener/internal/handler"
 	"github.com/truenuta/urlshortener/internal/logger"
 	"github.com/truenuta/urlshortener/internal/middleware"
@@ -36,16 +38,30 @@ func main() {
 		zapLogger.Fatal("failed to load storage", zap.Error(err))
 	}
 	service := service.NewURLServiсe(repository)
-	h := handler.NewHandler(cfg.BaseShortURLAddress, service, zapLogger, repository)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	urlDeleter := deleter.NewDeleter(repository, zapLogger, deleter.Config{
+		Workers:        cfg.DeleteWorkers,
+		FlushThreshold: cfg.DeleteFlushThreshold,
+		FlushInterval:  cfg.DeleteFlushInterval,
+		QueueCapacity:  cfg.DeleteQueueCapacity,
+	})
+	go urlDeleter.Run(ctx)
+
+	h := handler.NewHandler(cfg.BaseShortURLAddress, service, zapLogger, repository, urlDeleter)
+
 	r := chi.NewRouter()
 	r.Use(logger.RequestLogger(zapLogger))
 	r.Use(middleware.GzipMiddleware)
+	r.Use(middleware.AuthMiddleware)
 
 	r.Post("/", h.ShortenURL)
 	r.Post("/api/shorten", h.Shorten)
 	r.Post("/api/shorten/batch", h.ShortenBatch)
 	r.Get("/{id}", h.GetOriginalURL)
 	r.Get("/ping", h.PingBD)
+	r.With(middleware.RequireAuth).Get("/api/user/urls", h.GetUserURLs)
+	r.With(middleware.RequireAuth).Delete("/api/user/urls", h.DeleteUserURLs)
 
 	LaSerr := http.ListenAndServe(cfg.Address, r)
 	if LaSerr != nil {
