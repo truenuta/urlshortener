@@ -60,8 +60,8 @@ func main() {
 	r.Post("/api/shorten/batch", h.ShortenBatch)
 	r.Get("/{id}", h.GetOriginalURL)
 	r.Get("/ping", h.PingBD)
-	r.Get("/api/user/urls", h.GetUserURLs)
-	r.Delete("/api/user/urls", h.DeleteUserURLs)
+	r.With(middleware.RequireAuth).Get("/api/user/urls", h.GetUserURLs)
+	r.With(middleware.RequireAuth).Delete("/api/user/urls", h.DeleteUserURLs)
 
 	LaSerr := http.ListenAndServe(cfg.Address, r)
 	if LaSerr != nil {

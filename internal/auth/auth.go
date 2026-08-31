@@ -2,13 +2,13 @@ package auth
 
 import (
 	"crypto/rand"
-	"encoding/hex"
+	"encoding/base64"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
 )
 
-const TOKEN_EXP = time.Hour * 3
+const TokenExp = time.Hour * 3
 const SecretKey = "supersecretkey" // just for autotest and study purpose, not real key
 
 type Claims struct {
@@ -21,7 +21,7 @@ func BuildJWTString(UserID string) (string, error) {
 		jwt.SigningMethodHS256,
 		Claims{
 			RegisteredClaims: jwt.RegisteredClaims{
-				ExpiresAt: jwt.NewNumericDate(time.Now().Add(TOKEN_EXP)),
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(TokenExp)),
 			},
 			UserID: UserID,
 		})
@@ -52,6 +52,6 @@ func GenerateUserID() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return hex.EncodeToString(bytes), nil
+	return base64.RawURLEncoding.EncodeToString(bytes), nil
 
 }

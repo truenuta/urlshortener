@@ -27,7 +27,6 @@ func AuthFailedFromContext(ctx context.Context) bool {
 func AuthMiddleware(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var id string
-
 		authFailed := false
 		cookies, getCookiesErr := r.Cookie("JWTtoken")
 
@@ -52,6 +51,15 @@ func AuthMiddleware(h http.Handler) http.Handler {
 		ctx = context.WithValue(ctx, authFailedKey, authFailed)
 		r = r.WithContext(ctx)
 		h.ServeHTTP(w, r)
+	})
+}
 
+func RequireAuth(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if AuthFailedFromContext(r.Context()) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		h.ServeHTTP(w, r)
 	})
 }

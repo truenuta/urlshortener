@@ -65,7 +65,12 @@ func (h *Handler) ShortenURL(response http.ResponseWriter, request *http.Request
 		http.Error(response, "bad request", http.StatusBadRequest)
 		return
 	}
-	userID, _ := middleware.UserIDFromContext(request.Context())
+	userID, ok := middleware.UserIDFromContext(request.Context())
+	if !ok {
+		h.logger.Error("no userID in context")
+		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
 	shortURL, err := h.service.Shorten(string(body), userID)
 	if err != nil {
 		if errors.As(err, &conflictErr) {
@@ -120,7 +125,12 @@ func (h *Handler) Shorten(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 
-	userID, _ := middleware.UserIDFromContext(request.Context())
+	userID, ok := middleware.UserIDFromContext(request.Context())
+	if !ok {
+		h.logger.Error("no userID in context")
+		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
 	shortID, err := h.service.Shorten(req.URL, userID)
 	if errors.As(err, &conflictErr) {
 		if responseUrl, ok := h.writeConflictResponse(response, conflictErr.ShortURL); ok {
@@ -178,7 +188,12 @@ func (h *Handler) ShortenBatch(response http.ResponseWriter, request *http.Reque
 		http.Error(response, "empty batch", http.StatusBadRequest)
 		return
 	}
-	userID, _ := middleware.UserIDFromContext(request.Context())
+	userID, ok := middleware.UserIDFromContext(request.Context())
+	if !ok {
+		h.logger.Error("no userID in context")
+		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
 	items, err := h.service.ShortenBatch(req, userID)
 	if err != nil {
 		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -203,11 +218,12 @@ func (h *Handler) ShortenBatch(response http.ResponseWriter, request *http.Reque
 }
 
 func (h *Handler) GetUserURLs(response http.ResponseWriter, request *http.Request) {
-	if middleware.AuthFailedFromContext(request.Context()) {
-		response.WriteHeader(http.StatusUnauthorized)
+	userID, ok := middleware.UserIDFromContext(request.Context())
+	if !ok {
+		h.logger.Error("no userID in context")
+		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	userID, _ := middleware.UserIDFromContext(request.Context())
 	urls, err := h.service.GetUserURLs(userID)
 	if err != nil {
 		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -230,11 +246,12 @@ func (h *Handler) GetUserURLs(response http.ResponseWriter, request *http.Reques
 }
 
 func (h *Handler) DeleteUserURLs(response http.ResponseWriter, request *http.Request) {
-	if middleware.AuthFailedFromContext(request.Context()) {
-		response.WriteHeader(http.StatusUnauthorized)
+	userID, ok := middleware.UserIDFromContext(request.Context())
+	if !ok {
+		h.logger.Error("no userID in context")
+		http.Error(response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	userID, _ := middleware.UserIDFromContext(request.Context())
 	var shortURLs []string
 	if err := json.NewDecoder(request.Body).Decode(&shortURLs); err != nil {
 		h.logger.Debug("cannot decode delete request JSON body", zap.Error(err))
